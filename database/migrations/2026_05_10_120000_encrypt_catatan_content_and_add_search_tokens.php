@@ -11,20 +11,30 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('catatans', function (Blueprint $table) {
-            $table->boolean('show_preview')->default(false)->after('preview_isi');
-        });
+        if (! Schema::hasColumn('catatans', 'show_preview')) {
+    Schema::table('catatans', function (Blueprint $table) {
+        $table->boolean('show_preview')->default(false)->after('preview_isi');
+    });
+}
 
-        Schema::create('catatan_search_tokens', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('catatan_id')->constrained('catatans')->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
-            $table->string('token_hash', 64);
+      if (! Schema::hasTable('catatan_search_tokens')) {
+    Schema::create('catatan_search_tokens', function (Blueprint $table) {
+        $table->id();
+        $table->foreignId('catatan_id')->constrained('catatans')->cascadeOnDelete();
+        $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+        $table->string('token_hash', 64);
 
-            $table->unique(['catatan_id', 'token_hash'], 'catatan_search_tokens_catatan_hash_unique');
-            $table->index(['user_id', 'token_hash'], 'catatan_search_tokens_user_hash_index');
-        });
+        $table->unique(
+            ['catatan_id', 'token_hash'],
+            'catatan_search_tokens_catatan_hash_unique'
+        );
 
+        $table->index(
+            ['user_id', 'token_hash'],
+            'catatan_search_tokens_user_hash_index'
+        );
+    });
+}
         DB::table('catatans')
             ->select(['id', 'user_id', 'isi'])
             ->orderBy('id')

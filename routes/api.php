@@ -1,6 +1,10 @@
 <?php
 
+use App\Http\Controllers\Api\KeuanganBudgetController;
+use App\Http\Controllers\Api\KeuanganStatistikController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AiWorkspaceController;
+use App\Http\Controllers\Ai\AiChatController;
 use App\Http\Controllers\Api\CatatanController;
 use App\Http\Controllers\Api\JadwalController;
 use App\Http\Controllers\Api\KeuanganController;
@@ -39,6 +43,15 @@ Route::prefix('v1')->group(function () use ($userWriteMiddleware) {
         Route::post('profile/avatar', [ProfileController::class, 'uploadAvatar'])->middleware($userWriteMiddleware)->name('api.v1.profile.avatar.store');
         Route::delete('profile/avatar', [ProfileController::class, 'deleteAvatar'])->middleware($userWriteMiddleware)->name('api.v1.profile.avatar.destroy');
         Route::get('profile/avatar', ProfileAvatarController::class)->name('api.v1.profile.avatar');
+
+        // AI uses the same conversation/run engine as the web workspace, with
+        // Sanctum authentication for mobile clients.
+        Route::get('ai/sessions', [AiWorkspaceController::class, 'sessions'])->name('api.v1.ai.sessions.index');
+        Route::get('ai/sessions/{session}', [AiWorkspaceController::class, 'messages'])->whereNumber('session')->name('api.v1.ai.sessions.messages');
+        Route::post('ai/chat', [AiChatController::class, 'sendMessage'])
+            ->middleware('throttle:ai-chat')
+            ->name('api.v1.ai.chat');
+        Route::get('ai/runs/{run}', [AiChatController::class, 'runStatus'])->whereNumber('run')->name('api.v1.ai.runs.show');
 
         Route::get('sync/pull', [SyncController::class, 'pull'])->name('api.v1.sync.pull');
         Route::post('sync/push', [SyncController::class, 'push'])
@@ -90,7 +103,7 @@ Route::prefix('v1')->group(function () use ($userWriteMiddleware) {
         Route::delete('todolist/{todolist}', [TodolistController::class, 'destroy'])
             ->middleware($userWriteMiddleware)
             ->whereNumber('todolist')
-            ->name('api.v1.todolist.destroy');
+    ->name('api.v1.todolist.destroy');
 
         Route::get('keuangan', [KeuanganController::class, 'index'])->name('api.v1.keuangan.index');
         Route::post('keuangan', [KeuanganController::class, 'store'])->middleware($userWriteMiddleware)->name('api.v1.keuangan.store');
@@ -105,6 +118,23 @@ Route::prefix('v1')->group(function () use ($userWriteMiddleware) {
             ->middleware($userWriteMiddleware)
             ->whereNumber('keuangan')
             ->name('api.v1.keuangan.destroy');
+        // Anggaran Keuangan
+        Route::get('keuangan/anggaran', [KeuanganBudgetController::class, 'index'])
+            ->name('api.v1.keuangan.anggaran.index');
+
+        Route::post('keuangan/anggaran', [KeuanganBudgetController::class, 'store'])
+            // This endpoint is an idempotent upsert by user, category, and period.
+            ->middleware('throttle:api-write')
+            ->name('api.v1.keuangan.anggaran.store');
+
+        Route::delete('keuangan/anggaran/{budget}', [KeuanganBudgetController::class, 'destroy'])
+            ->middleware($userWriteMiddleware)
+            ->whereNumber('budget')
+            ->name('api.v1.keuangan.anggaran.destroy');
+
+        // Statistik Keuangan
+        Route::get('keuangan/statistik', [KeuanganStatistikController::class, 'index'])
+            ->name('api.v1.keuangan.statistik.index');
 
         Route::get('jadwal', [JadwalController::class, 'index'])->name('api.v1.jadwal.index');
         Route::post('jadwal', [JadwalController::class, 'store'])->middleware($userWriteMiddleware)->name('api.v1.jadwal.store');

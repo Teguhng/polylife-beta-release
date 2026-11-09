@@ -34,14 +34,18 @@ class BudgetEvaluationService
         $startDate = Carbon::create($year, $month, 1)->startOfMonth()->toDateString();
         $endDate = Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
 
-        $actuals = Keuangan::where('user_id', $userId)
+        $rows = Keuangan::where('user_id', $userId)
             ->where('jenis', 'pengeluaran')
             ->whereBetween('tanggal', [$startDate, $endDate])
             ->selectRaw('kategori, SUM(nominal) as total')
             ->groupBy('kategori')
-            ->pluck('total', 'kategori')
-            ->map(fn ($val) => (float) $val)
-            ->all();
+            ->get();
+
+        $actuals = [];
+        foreach ($rows as $row) {
+            $key = $this->categoryKey((string) $row->kategori);
+            $actuals[$key] = ($actuals[$key] ?? 0.0) + (float) $row->total;
+        }
 
         return $this->formatEvaluation($budgets, $actuals, $month, $year);
     }
@@ -73,7 +77,8 @@ class BudgetEvaluationService
                 if ($tDate->month === $month && $tDate->year === $year) {
                     $kategori = trim((string) (is_array($t) ? ($t['kategori'] ?? 'Lainnya') : ($t->kategori ?? 'Lainnya'))) ?: 'Lainnya';
                     $nominal = (float) (is_array($t) ? ($t['nominal'] ?? 0) : ($t->nominal ?? 0));
-                    $actuals[$kategori] = ($actuals[$kategori] ?? 0.0) + $nominal;
+                    $key = $this->categoryKey($kategori);
+                    $actuals[$key] = ($actuals[$key] ?? 0.0) + $nominal;
                 }
             } catch (\Throwable $e) {
                 // skip
@@ -99,10 +104,12 @@ class BudgetEvaluationService
         foreach ($budgets as $b) {
             $id = is_array($b) ? ($b['id'] ?? null) : ($b->id ?? null);
             $kategori = trim((string) (is_array($b) ? ($b['kategori'] ?? '') : ($b->kategori ?? '')));
+            $categoryKey = $this->categoryKey($kategori);
+            $kategori = $this->categoryLabel($kategori);
             $limit = (float) (is_array($b) ? ($b['nominal_limit'] ?? 0) : ($b->nominal_limit ?? 0));
-            $actual = (float) ($actuals[$kategori] ?? 0.0);
+            $actual = (float) ($actuals[$categoryKey] ?? 0.0);
 
-            $budgetedCategories[] = $kategori;
+            $budgetedCategories[] = $categoryKey;
             $totalLimit += $limit;
             $totalSpent += $actual;
 
@@ -151,7 +158,7 @@ class BudgetEvaluationService
         foreach ($actuals as $kat => $amount) {
             if (! in_array($kat, $budgetedCategories, true) && $amount > 0) {
                 $unbudgetedExpenses[] = [
-                    'kategori' => $kat,
+                    'kategori' => $this->categoryLabel($kat),
                     'actual_spent' => $amount,
                 ];
             }
@@ -178,5 +185,17 @@ class BudgetEvaluationService
             'health_color' => $healthColor,
             'category_suggestions' => self::DEFAULT_CATEGORIES,
         ];
+    }
+
+    private function categoryKey(string $category): string
+    {
+        $normalized = preg_replace('/\s+/u', ' ', trim($category)) ?: 'Lainnya';
+
+        return mb_strtolower($normalized, 'UTF-8');
+    }
+
+    private function categoryLabel(string $category): string
+    {
+        return mb_convert_case($this->categoryKey($category), MB_CASE_TITLE, 'UTF-8');
     }
 }

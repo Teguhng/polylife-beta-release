@@ -35,15 +35,22 @@ class YearlyStatisticsService
 
         $kategoriPengeluaran = [];
         $kategoriPemasukan = [];
+        $labelKategori = [];
 
         foreach ($normalizedRecords as $record) {
             $month = (int) $record['tanggal']->month;
+            $categoryKey = $this->categoryKey($record['kategori']);
+            $labelKategori[$categoryKey] ??= mb_convert_case(
+                $categoryKey,
+                MB_CASE_TITLE,
+                'UTF-8'
+            );
             if ($record['jenis'] === 'pemasukan') {
                 $byMonth[$month]['pemasukan'] += $record['nominal'];
-                $kategoriPemasukan[$record['kategori']] = ($kategoriPemasukan[$record['kategori']] ?? 0) + $record['nominal'];
+                $kategoriPemasukan[$categoryKey] = ($kategoriPemasukan[$categoryKey] ?? 0) + $record['nominal'];
             } else {
                 $byMonth[$month]['pengeluaran'] += $record['nominal'];
-                $kategoriPengeluaran[$record['kategori']] = ($kategoriPengeluaran[$record['kategori']] ?? 0) + $record['nominal'];
+                $kategoriPengeluaran[$categoryKey] = ($kategoriPengeluaran[$categoryKey] ?? 0) + $record['nominal'];
             }
         }
 
@@ -77,12 +84,6 @@ class YearlyStatisticsService
         $avgPengeluaran = $bulanTerisi ? $totalPengeluaran / $bulanTerisi : 0;
         $avgNet = $bulanTerisi ? $totalNet / $bulanTerisi : 0;
 
-        $monthlyExpenses = array_map(
-            fn (int $month): float|int => $byMonth[$month]['pengeluaran'],
-            $months
-        );
-        $anomali = $this->detectExpenseAnomalies($monthlyExpenses, $monthNames);
-
         $isDefisit = $totalNet < 0;
         $rawSavingsRate = $totalPemasukan > 0 ? ($totalNet / $totalPemasukan) : 0;
         $savingsRate = max(0.0, $rawSavingsRate);
@@ -92,16 +93,19 @@ class YearlyStatisticsService
         $proyeksiLabel = $isTahunBerjalan ? 'Proyeksi Akhir Tahun' : 'Total Bersih Tahunan';
 
         arsort($kategoriPengeluaran);
-        $topKategoriPengeluaran = array_slice($kategoriPengeluaran, 0, 5, true);
+        $topKategoriPengeluaran = $this->formatTopCategories(
+            array_slice($kategoriPengeluaran, 0, 5, true),
+            $labelKategori
+        );
         arsort($kategoriPemasukan);
-        $topKategoriPemasukan = array_slice($kategoriPemasukan, 0, 5, true);
+        $topKategoriPemasukan = $this->formatTopCategories(
+            array_slice($kategoriPemasukan, 0, 5, true),
+            $labelKategori
+        );
 
         $saran = [];
         if ($savingsRate < 0.1 && $totalPemasukan > 0 && ! $isDefisit) {
             $saran[] = 'Tingkatkan savings rate ke > 10% dengan kurangi kategori pengeluaran terbesar.';
-        }
-        if (! empty($anomali)) {
-            $saran[] = 'Terdapat anomali pengeluaran: cek kembali bulan dengan lonjakan.';
         }
         if ($avgPemasukan < $avgPengeluaran) {
             $saran[] = 'Rata-rata pengeluaran melebihi pemasukan. Pertimbangkan penyesuaian anggaran.';
@@ -128,7 +132,6 @@ class YearlyStatisticsService
             'proyeksiAkhirTahun' => $proyeksiAkhirTahun,
             'topKategoriPengeluaran' => $topKategoriPengeluaran,
             'topKategoriPemasukan' => $topKategoriPemasukan,
-            'anomali' => $anomali,
             'monthNames' => $monthNames,
             'saran' => $saran,
             'initialBalance' => $initialBalance,
@@ -146,50 +149,26 @@ class YearlyStatisticsService
         return 12;
     }
 
-    /**
-     * @param  array<int, float|int>  $monthlyExpenses  Zero-based list ordered from January to December.
-     * @param  array<int, string>  $monthNames  One-based month labels.
-     * @return list<array{bulan: string, nilai: float|int, batas: float}>
-     */
-    private function detectExpenseAnomalies(array $monthlyExpenses, array $monthNames): array
+    private function categoryKey(string $category): string
     {
-        $sample = array_values(array_filter(
-            $monthlyExpenses,
-            fn (float|int $value): bool => $value > 0
-        ));
+        $normalized = preg_replace('/\s+/u', ' ', trim($category)) ?: 'Lainnya';
 
-        if (count($sample) < 3) {
-            return [];
+        return mb_strtolower($normalized, 'UTF-8');
+    }
+
+    /**
+     * @param  array<string, float|int>  $totals
+     * @param  array<string, string>  $labels
+     * @return array<string, float|int>
+     */
+    private function formatTopCategories(array $totals, array $labels): array
+    {
+        $formatted = [];
+        foreach ($totals as $key => $total) {
+            $formatted[$labels[$key] ?? $key] = $total;
         }
 
-        $mean = array_sum($sample) / count($sample);
-        $variance = array_sum(array_map(
-            fn (float|int $value): float => pow($value - $mean, 2),
-            $sample
-        ));
-        $stdDeviation = sqrt($variance / count($sample));
-
-        if ($stdDeviation <= 0.0) {
-            return [];
-        }
-
-        $threshold = $mean + (1.5 * $stdDeviation);
-        $anomalies = [];
-
-        foreach ($monthlyExpenses as $index => $expense) {
-            if ($expense <= $threshold || $expense <= 0) {
-                continue;
-            }
-
-            $monthNumber = $index + 1;
-            $anomalies[] = [
-                'bulan' => $monthNames[$monthNumber] ?? (string) $monthNumber,
-                'nilai' => $expense,
-                'batas' => $threshold,
-            ];
-        }
-
-        return $anomalies;
+        return $formatted;
     }
 
     /**

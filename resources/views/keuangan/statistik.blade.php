@@ -135,33 +135,6 @@
         </div>
     </div>
 
-    <div class="bg-white border rounded-2xl shadow-sm p-6 dark:bg-slate-900 dark:border-slate-800">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-slate-100">Deteksi Anomali Pengeluaran</h3>
-            <span class="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200 font-medium">Algoritma: mean + 1.5σ</span>
-        </div>
-        <table class="min-w-full text-sm">
-            <thead>
-                <tr class="text-left border-b border-gray-100 dark:border-slate-800 text-gray-500 dark:text-slate-400">
-                    <th class="py-2 pr-4">Bulan</th>
-                    <th class="py-2 pr-4 text-right">Pengeluaran</th>
-                    <th class="py-2 pr-4 text-right">Batas</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-slate-800">
-                @forelse($anomali as $a)
-                <tr class="text-gray-800 dark:text-slate-200">
-                    <td class="py-2 pr-4">{{ $a['bulan'] }}</td>
-                    <td class="py-2 pr-4 text-right font-medium">Rp {{ number_format($a['nilai'],0,',','.') }}</td>
-                    <td class="py-2 pr-4 text-right text-gray-500 dark:text-slate-400">Rp {{ number_format($a['batas'],0,',','.') }}</td>
-                </tr>
-                @empty
-                <tr><td colspan="3" class="py-4 text-center text-gray-500 dark:text-slate-400">Tidak ada anomali terdeteksi.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
-    </div>
-
     @if(!empty($saran))
     <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10">
         <h3 class="text-lg font-semibold mb-2 text-indigo-900 dark:text-indigo-200">Saran Otomatis</h3>
